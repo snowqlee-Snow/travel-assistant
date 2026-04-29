@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+    <title>攻略助手 - Snow & Paige</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <style>
+:root {
+  --bg: #f4f6f8;
+  --card: #ffffff;
+  --text: #16202a;
+  --muted: #6f7b88;
+  --primary: #1d4ed8;
+  --primary-2: #0ea5e9;
+  --accent: #9b7b4f;
+  --warm: #d4a45a;
+  --border: #e5e7eb;
+  --done: #16a34a;
+  --doing: #2563eb;
+  --todo: #6b7280;
+  --drop: #dc2626;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(29, 78, 216, 0.10), transparent 28%),
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.10), transparent 24%),
+    linear-gradient(180deg, #fbfcfe 0%, #f4f6f8 48%, #eef2f7 100%);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+.app { min-height: 100dvh; max-width: 768px; margin: 0 auto; display: flex; flex-direction: column; }
+.app-header {
+  position: sticky; top: 0; z-index: 20;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.92), rgba(29, 78, 216, 0.94));
+  color: #fff; padding: 14px 12px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 14px 30px rgba(29, 78, 216, 0.16);
+  backdrop-filter: blur(10px);
+}
+.app-header .progress-row { color: rgba(255,255,255,0.88); }
+h1 { margin: 0; font-size: 18px; }
+.progress-row { margin-top: 8px; display: flex; gap: 12px; font-size: 13px; color: var(--muted); }
+.app-main { flex: 1; padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+.tab-content { display: none; padding: 12px; }
+.tab-content.active { display: block; }
+.trip-controls {
+  position: sticky;
+  top: 72px;
+  z-index: 18;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  background: #ffffff;
+}
+.filters, .filters.full {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid rgba(29, 78, 216, 0.10);
+  border-radius: 18px;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+}
+.filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.filters.full { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+select, input, textarea, button { font-size: 14px; }
+select, input[type="date"], textarea {
+  width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; background: #fff; min-height: 52px; resize: vertical;
+}
+.switch-row { display: flex; align-items: center; gap: 8px; margin: 8px 0 12px; color: var(--muted); font-size: 13px; background: #ffffff; padding: 8px 10px; border: 1px solid rgba(29, 78, 216, 0.10); border-radius: 12px; }
+.card { background: var(--card); border: 1px solid rgba(29, 78, 216, 0.08); border-radius: 18px; padding: 12px; margin-bottom: 10px; box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06); position: relative; overflow: hidden; }
+.card::before { content: ""; position: absolute; left: 0; top: 0; width: 6px; height: 100%; background: linear-gradient(180deg, var(--snow-bar, #9ca3af) 0%, var(--snow-bar, #9ca3af) 50%, var(--paige-bar, #9ca3af) 50%, var(--paige-bar, #9ca3af) 100%); }
+.card-content { position: relative; z-index: 1; padding-left: 10px; }
+.card h3 { margin: 0 0 8px; font-size: 16px; line-height: 1.35; }
+.headline-time { font-weight: 700; color: #0f4c81; }
+.meta { margin: 4px 0; color: var(--muted); font-size: 13px; }
+.note-list { margin: 4px 0 6px 16px; color: var(--muted); font-size: 13px; padding: 0; }
+.note-list li { margin: 2px 0; }
+.link-list a { display: block; margin: 4px 0; color: var(--primary); text-decoration: underline; }
+.status-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 8px; }
+.user-box { border: 1px solid var(--border); border-radius: 10px; padding: 6px; min-width: 0; overflow: hidden; }
+.user-box textarea { width: 100%; min-width: 0; max-width: 100%; resize: vertical; }
+.user-box select { width: 100%; min-width: 0; }
+.user-box strong { font-size: 13px; }
+.star-row { margin: 6px 0 8px; display: flex; gap: 3px; justify-content: space-between; }
+.star-btn {
+  min-height: clamp(24px, 2.8vw, 32px);
+  min-width: clamp(24px, 2.8vw, 32px);
+  width: clamp(24px, 2.8vw, 32px);
+  height: clamp(24px, 2.8vw, 32px);
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #9ca3af;
+  font-size: clamp(12px, 1.8vw, 18px);
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.star-btn.active { color: #f59e0b; border-color: #f59e0b; background: #fffbeb; }
+.status-select { margin: 6px 0; }
+.status-tag { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 12px; color: #fff; box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12); }
+.status-已完成 { background: var(--done); }
+.status-进行中 { background: var(--doing); }
+.status-未完成 { background: var(--todo); }
+.status-放弃 { background: var(--drop); }
+.status-已打卡 { background: #16a34a; }
+.status-打算去 { background: #7c3aed; }
+.status-未打卡 { background: #6b7280; }
+.status-select { margin: 6px 0; }
+.status-tag { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 12px; color: #fff; box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12); }
+.status-已完成 { background: var(--done); }
+.status-进行中 { background: var(--doing); }
+.status-未完成 { background: var(--todo); }
+.status-放弃 { background: var(--drop); }
+.status-已打卡 { background: #16a34a; }
+.status-打算去 { background: #2563eb; }
+.status-未打卡 { background: #6b7280; }
+.card-state-trip-done { --snow-bar: #16a34a; }
+.card-state-trip-doing { --snow-bar: #2563eb; }
+.card-state-trip-todo { --snow-bar: #9ca3af; }
+.card-state-trip-drop { --snow-bar: #dc2626; }
+.card-type-交通 { }
+.card-type-住宿 { }
+.card-type-旅游 { }
+.card-type-饮食 { }
+.card-type-准备 { }
+.card-state-food-done { --snow-bar: #16a34a; }
+.card-state-food-plan { --snow-bar: #2563eb; }
+.card-state-food-todo { --snow-bar: #6b7280; }
+.card-actions { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+button { min-height: 44px; border: none; border-radius: 12px; background: linear-gradient(135deg, var(--primary), var(--primary-2)); color: #fff; padding: 0 12px; box-shadow: 0 10px 22px rgba(29, 78, 216, 0.18); }
+button.secondary { background: rgba(255,255,255,0.92); border: 1px solid rgba(29, 78, 216, 0.10); color: var(--text); box-shadow: none; }
+.bottom-nav {
+  position: fixed; left: 50%; transform: translateX(-50%); width: min(100%, 768px); bottom: 0;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  background: #ffffff;
+  border-top: 1px solid rgba(29, 78, 216, 0.12);
+  box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.06);
+  z-index: 999;
+}
+.nav-btn { background: #ffffff; color: var(--text); border: 1px solid rgba(29, 78, 216, 0.10); box-shadow: 0 6px 14px rgba(15, 23, 42, 0.05); }
+.nav-btn.active { background: linear-gradient(135deg, #1d4ed8, #0ea5e9); color: #fff; border-color: transparent; }
+#map { width: 100%; height: calc(100vh - 240px); min-height: 360px; border-radius: 12px; border: 1px solid var(--border); }
+.map-toolbar { margin-bottom: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+.toast {
+  position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%);
+  background: rgba(17, 24, 39, 0.92); color: #fff; padding: 8px 12px; border-radius: 999px;
+  font-size: 12px; opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+  z-index: 2000;
+}
+.toast.show { opacity: 1; }
+.map-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 240px;
+  max-width: 320px;
+  background: #ffffff;
+  color: var(--text);
+}
+.map-popup__title { font-weight: 700; font-size: 15px; line-height: 1.35; color: #0f4c81; }
+.map-popup__meta { color: var(--muted); font-size: 12px; }
+.map-popup__section { border-top: 1px solid var(--border); padding-top: 8px; }
+.map-popup__section-title { font-size: 12px; color: #0f4c81; margin-bottom: 6px; font-weight: 600; }
+.popup-chip-list { display: flex; gap: 6px; flex-wrap: wrap; }
+.popup-chip { border: 1px solid rgba(29, 78, 216, 0.14); background: #eff6ff; color: #1d4ed8; border-radius: 999px; padding: 6px 10px; min-height: 34px; font-size: 12px; cursor: pointer; }
+.map-popup__empty { color: var(--muted); font-size: 12px; }
+.map-popup__links a { display: block; margin: 4px 0; word-break: break-word; }
+.map-popup textarea { min-height: 54px; border-radius: 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="app-header">
+        <h1>攻略助手 - Snow & Paige</h1>
+        <div class="progress-row">
+          <span id="progress-snow">Snow: 0/0</span>
+          <span id="progress-paige">Paige: 0/0</span>
+        </div>
+      </header>
+
+      <main class="app-main">
+        <section id="tab-trip" class="tab-content active"></section>
+        <section id="tab-food" class="tab-content"></section>
+        <section id="tab-map" class="tab-content">
+          <div class="map-toolbar" id="map-toolbar"></div>
+          <div id="map"></div>
+        </section>
+      </main>
+
+      <footer class="bottom-nav" aria-label="主导航">
+        <button class="nav-btn active" data-tab="trip">行程</button>
+        <button class="nav-btn" data-tab="food">美食</button>
+        <button class="nav-btn" data-tab="map">地图</button>
+      </footer>
+    </div>
+    <div id="toast" class="toast"></div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script>
+(function () {
+  const JPY_TO_CNY = 0.043;
+  const AREA_LIST = ["涩谷", "浅草", "上野", "秋叶原", "东京", "惠比寿", "下北泽", "人形町", "热海", "伊东", "大室山", "城崎海岸", "伊豆高原"];
+  function parseCSV(text) {
+    const rows = []; let row = []; let cell = ""; let i = 0; let inQuotes = false;
+    while (i < text.length) {
+      const ch = text[i]; const next = text[i + 1];
+      if (inQuotes) { if (ch === '"' && next === '"') { cell += '"'; i += 2; continue; } if (ch === '"') { inQuotes = false; i += 1; continue; } cell += ch; i += 1; continue; }
+      if (ch === '"') { inQuotes = true; i += 1; continue; }
+      if (ch === ",") { row.push(cell); cell = ""; i += 1; continue; }
+      if (ch === "\n" || ch === "\r") { if (ch === "\r" && next === "\n") i += 1; row.push(cell); rows.push(row); row = []; cell = ""; i += 1; continue; }
+      cell += ch; i += 1;
+    }
+    if (cell.length || row.length) { row.push(cell); rows.push(row); }
+    const headers = (rows.shift() || []).map((h) => String(h || "").trim());
+    return rows.filter((r) => r.some((v) => String(v || "").trim())).map((r) => { const o = {}; headers.forEach((h, idx) => { o[h] = (r[idx] || "").trim(); }); return o; });
+  }
+  function norm(s) { return String(s || "").toLowerCase().replace(/[\s\-_（）()【】\[\]・,，.。:：]/g, ""); }
+  function f(v) { const n = Number(String(v || "").replace(/,/g, "").trim()); return Number.isFinite(n) ? n : 0; }
+  function dateFix(v) { const t = String(v || "").trim(); const m = t.match(/^(\d{1,2})月(\d{1,2})日$/); if (!m) return t; return `2026-${String(m[1]).padStart(2, "0")}-${String(m[2]).padStart(2, "0")}`; }
+  function cleanTitle(v) { return String(v || "").replace(/【|】/g, "").trim(); }
+  function detectArea(...texts) { const all = texts.join(" "); return AREA_LIST.find((a) => all.includes(a)) || ""; }
+  function splitType(v) { const t = String(v || "").replace(/\s/g, ""); if (!t) return ""; if (t.includes("交通")) return "交通"; if (t.includes("住宿")) return "住宿"; if (t.includes("饮食")) return "饮食"; if (t.includes("旅游")) return "旅游"; return ""; }
+  function parseLinks(obj) {
+    const links = [];
+    let i = 1;
+    Object.entries(obj).forEach(([k, v]) => {
+      if (!k.includes("对应链接")) return;
+      if (!v || !/^https?:\/\//.test(v)) return;
+      const titleKey = k.replace("对应链接", "").replace(/-+$/, "");
+      const fallbackTitleKey = titleKey.replace(/-\d+$/, "");
+      const title = obj[titleKey] || obj[fallbackTitleKey] || `参考攻略-${i}`;
+      links.push({ title: String(title).trim() || `参考攻略-${i}`, url: v.trim() });
+      i += 1;
+    });
+    return links;
+  }
+  const PLACE_CSV = `地点名称,纬度 (lat),经度 (lng),类型,区域,来源
+涩谷 Scramble Square,35.6586,139.7034,景点,涩谷,行程
+鴨to葱 渋谷宮益坂店,35.6602,139.6985,餐厅,涩谷,饮食
+七輪焼肉 安安 渋谷道玄坂店,35.6595,139.696,餐厅,涩谷,饮食
+センタービーフ 渋谷店,35.66,139.7,餐厅,涩谷,饮食
+EDW yellow Shibuya,35.661,139.7005,餐厅,涩谷,饮食
+新潟カツ丼タレカツ 渋谷店,35.6588,139.7025,餐厅,涩谷,饮食
+道玄坂 漁,35.6592,139.6955,餐厅,涩谷,饮食
+浅草文化观光中心,35.7147,139.7967,景点,浅草,行程
+浅草寺雷门,35.711,139.7967,景点,浅草,行程
+名代 宇奈とと 浅草店,35.713,139.7955,餐厅,浅草,饮食
+一蘭 浅草六区店,35.714,139.794,餐厅,浅草,饮食
+浅草名代らーめん 与ろゐ屋,35.7125,139.796,餐厅,浅草,饮食
+国立西洋美术馆,35.7155,139.7758,景点,上野,行程
+东京国立博物馆,35.7186,139.7763,景点,上野,行程
+秋叶原 Radio 会馆,35.6984,139.7731,景点,秋叶原,行程
+秋叶原 Animate,35.6992,139.7708,景点,秋叶原,行程
+骏河屋 秋叶原本馆,35.6989,139.7715,景点,秋叶原,行程
+面屋武藏 巌虎 秋葉原店,35.6995,139.7725,餐厅,秋叶原,饮食
+ローストビーフ大野 秋葉原店,35.698,139.7738,餐厅,秋叶原,饮食
+Curry&Cafe SAMA 神田,35.694,139.77,餐厅,神田,饮食
+东京站,35.6812,139.7671,交通,东京,行程
+东京铁塔,35.6586,139.7454,景点,东京,行程
+惠比寿花园广场,35.646,139.7119,景点,惠比寿,行程
+AFURI 恵比寿,35.6468,139.709,餐厅,惠比寿,饮食
+釜元たん米衛 恵比寿店,35.6465,139.7105,餐厅,惠比寿,饮食
+キムカツ 恵比寿本店,35.6462,139.7108,餐厅,惠比寿,饮食
+チャモロ（Chamorro）,35.6455,139.7115,餐厅,惠比寿,饮食
+下北泽,35.663,139.6681,商圈,下北泽,行程
+SAMA CURRY 下北沢店,35.6635,139.669,餐厅,下北泽,饮食
+202カリー堂,35.6628,139.6685,餐厅,下北泽,饮食
+BEAR POND ESPRESSO,35.662,139.667,餐厅,下北泽,饮食
+三豐麵 人形町支店,35.687,139.7755,餐厅,人形町,饮食
+人形町今半 本店,35.6865,139.7758,餐厅,人形町,饮食
+谷や（Sanuki Udon Taniya）,35.6875,139.776,餐厅,人形町,饮食
+しんぱち食堂 人形町店,35.686,139.775,餐厅,人形町,饮食
+つじ田 日本橋人形町店,35.6872,139.7753,餐厅,人形町,饮食
+热海站,35.1042,139.0765,交通,热海,行程
+平和通商业街,35.1049,139.0765,景点,热海,行程
+MOA 美术馆,35.1054,139.0762,景点,热海,行程
+热海亲水公园,35.105,139.0748,景点,热海,行程
+雨風本舗,35.1045,139.076,餐厅,热海,饮食
+熱海おさかな?大食堂,35.1055,139.0768,餐厅,热海,饮食
+Atami GOLDEN EYE,35.1051,139.0772,餐厅,热海,饮食
+そばの坊（Nijo Shinmachi）,35.106,139.0765,餐厅,热海,饮食
+伊东站,34.9735,139.0802,交通,伊东,行程
+龟屋乐宽旅馆,34.973,139.0835,住宿,伊东,行程
+まるげん（Marugen）,34.974,139.081,餐厅,伊东,饮食
+手打庵 松原店,34.9725,139.0805,餐厅,伊东,饮食
+飯や 笑,34.9745,139.082,餐厅,伊东,饮食
+焼肉成翠園 伊東湯川店,34.97,139.085,餐厅,伊东,饮食
+大室山,34.875,139.108,景点,伊豆高原,行程
+おおむろ軽食堂,34.8755,139.1085,餐厅,大室山,饮食
+仙人掌动物园站,34.8735,139.1095,交通,伊豆高原,行程
+伊豆海洋公园,34.8912,139.1295,景点,城崎海岸,行程
+门胁吊桥,34.895,139.135,景点,城崎海岸,行程
+城崎海岸站,34.8875,139.133,交通,城崎海岸,行程
+楽園食堂 城ヶ崎 BLUE,34.887,139.1325,餐厅,城崎海岸,饮食`;
+  const REST_CSV = `店名,位置,区域,类型,推荐菜品,备注,参考攻略,参考攻略-对应链接
+【三豐麵】,三豊麺 人形町支店,人形町,拉面,拉面、炸鸡,,东京人形町拉面必吃榜,https://www.xiaohongshu.com/discovery/item/68de80b6000000000700c603?source=webshare
+【今半本店】,人形町今半 人形町本店,人形町,寿喜烧,,排队，或需预约,东京吃饭日记2,https://www.xiaohongshu.com/discovery/item/690641a80000000004014a87?source=webshare
+【谷や（Sanuki Udon Taniya）】,Sanuki Udon Taniya 谷や,人形町,乌冬面,冷蘸乌冬、生蛋拌乌冬,人多,东京省钱攻略｜人形町美食合集 无预约,https://www.xiaohongshu.com/discovery/item/684e50d9000000002100ba10?source=webshare
+【しんぱち食堂】,Shinpachi Shokudo Ningyocho 炭火焼干物定食しんぱち食堂人形町店,人形町,定食,炸猪排定食、姜烧猪肉饭,用平板 中文点餐,东京省钱攻略｜人形町美食合集 无预约,https://www.xiaohongshu.com/discovery/item/684e50d9000000002100ba10?source=webshare
+【Tsujita Nihonbashi Ningyocho】,Tsujita Nihonbashi Ningyocho つじ田 日本橋人形町店,人形町,拉面,蘸面,排队,人形町的人生拉面店,https://www.xiaohongshu.com/discovery/item/682d372b000000000f03099a?source=webshare
+【らーめん 鴨to葱】,Ramen Kamo to Negi Shibuya Miyamasuzaka Branch らーめん 鴨to葱 渋谷宮益坂店,涩谷,拉面,鸭肉拉面,只收现金,涩谷人均60r我反复去的真正平价美食,https://www.xiaohongshu.com/discovery/item/68da6719000000000e0254fc?source=webshare
+【七輪焼肉 安安】,Shichirin Yakiniku Anan 七輪焼肉 安安 渋谷道玄坂店,涩谷,烧肉,放题,邢哥力荐,日留认证的东京必吃美食,https://www.xiaohongshu.com/discovery/item/66e98f8f0000000027004767?source=webshare
+【センタービーフ】,Steak Rice & Curry Restaurant センタービーフ渋谷店,涩谷,定食,黄油蒜香饭,排队,东京涩谷 超好吃的烤牛排饭,https://www.xiaohongshu.com/discovery/item/690b885b0000000004000d9d?source=webshare
+【EDW yellow】,EDW yellow Shibuya yellow 渋谷,涩谷,蛋包饭,,超火 褒贬不一 不支持现金,涩谷蛋包饭EDW yellow Shibuya我也吃到啦,https://www.xiaohongshu.com/discovery/item/68ac60f2000000001d02e22e?source=webshare
+【Niigata Katsudon Tarekatsu Shibuya】,Niigata Katsudon Tarekatsu 新潟カツ丼タレカツ 渋谷店,涩谷,猪排饭,,近地铁站,涩谷这家炸猪排店也太香了吧,https://www.xiaohongshu.com/discovery/item/677bb40b000000000100172d?source=webshare
+【道玄坂 漁】,Dogenzaka Isari 道玄坂 漁,涩谷,海鲜饭,,便宜,涩谷人均60r我反复去的真正平价美食,https://www.xiaohongshu.com/discovery/item/68da6719000000000e0254fc?source=webshare
+【Unatoto Asakusa 名代 宇奈とと】,Unatoto Asakusa 名代 宇奈とと 浅草店,浅草,鳗鱼饭,,吃到最后很腻,浅草寺附近太好吃了,https://www.xiaohongshu.com/discovery/item/66d696c6000000001d0160d0?source=webshare
+【一蘭】,ICHIRAN Asakusa Rokku 一蘭 浅草六区店,浅草,拉面,,排队,浅草寺附近太好吃了,https://www.xiaohongshu.com/discovery/item/66d696c6000000001d0160d0?source=webshare
+【浅草名代らーめん 与ろゐ屋店】,Yoroiya 浅草名代らーめん 与ろゐ屋,浅草,拉面,,人多 态度好,来浅草寺吃拉面请认准这一家,https://www.xiaohongshu.com/discovery/item/677e6273000000001a01f4c0?source=webshare
+【面屋武藏 岩虎】,面屋武藏 岩虎 秋叶原店 麺屋武蔵 巌虎,秋叶原,蘸面,,,每次去秋叶原必吃的拉面馆,https://www.xiaohongshu.com/discovery/item/6934254e000000001e007507?source=webshare
+【ローストビーフ大野】,Roast Beef Ono Akihabara ローストビーフ大野 秋葉原店,秋叶原,和牛饭,,,逛完动漫总得来一顿秋叶原专属美食吧,https://www.xiaohongshu.com/discovery/item/69a5857e000000002303a701?source=webshare
+【Curry&Cafe SAMA 神田】,Curry&Cafe SAMA 神田,秋叶原,汤咖喱,,排队,秋叶原大家都在推的咖喱,https://www.xiaohongshu.com/discovery/item/689ffaa7000000001d017dc3?source=webshare
+【雨風本舗】,雨風本舗,热海,拉面,,咸,热海必吃美食合集不踩雷分享,https://www.xiaohongshu.com/discovery/item/68e9eb080000000003020f4b?source=webshare
+【熱海おさかな大食堂】,Osakana Dai Shokudo 熱海おさかな大食堂,热海,海鲜饭,,,热海必吃美食合集不踩雷分享,https://www.xiaohongshu.com/discovery/item/68e9eb080000000003020f4b?source=webshare
+【Atami GOLDEN EYE】,Atami GOLDEN EYE 熱海ゴールデンアイ,热海,拉面,金目鲷拉面,极其鲜美,热海的金目鲷都给我去吃,https://www.xiaohongshu.com/discovery/item/69944f1c000000001a022de0?source=webshare
+【Nijo Shinmachi Soba no Bo そばの坊】,Nijo Shinmachi Soba no Bo そばの坊,热海,蘸面,,在美术馆附近,热海MOA美术馆还不错的荞麦面,https://www.xiaohongshu.com/discovery/item/6682736a000000001e010c68?source=webshare
+【Marugen まるげん】,Marugen まるげん,伊东,居酒屋,,,伊东超性价比好吃居酒屋,https://www.xiaohongshu.com/discovery/item/68da2740000000001201d586?source=webshare
+【Tetuchian Matsubara】,Tetuchian Matsubara 手打庵 松原店,伊东,荞麦面,,,伊东美食大家谈,https://www.xiaohongshu.com/discovery/item/68fe080300000000070362e3?source=webshare
+【飯や 笑】,Emi Izakaya and Restaurant 飯や 笑,伊东,定食,,,伊东美食推荐量大便宜的小店铺,https://www.xiaohongshu.com/discovery/item/660670bd0000000013027277?source=webshare
+【成翠园烤肉】,焼肉成翠園伊東湯川店,伊东,烧肉,和牛,好吃哭了,在伊豆吃到让我流泪的烤肉店,https://www.xiaohongshu.com/discovery/item/685e9fa000000000120167a4?source=webshare
+【おおむろ軽食堂】,Ohmuro Luncheonette おおむろ軽食堂,大室山,定食,,景区饭店凑活吃,隐藏在伊豆大室山脚下的神仙食堂,https://www.xiaohongshu.com/discovery/item/67d7e5f3000000001d03ab7d?source=webshare
+【楽園食堂 城ヶ崎BLUE】,楽園食堂 城ヶ崎BLUE,城崎海岸,定食,,仅现金 店员态度一般 近城崎海岸站,热海伊豆美食合集物价低到疯,https://www.xiaohongshu.com/discovery/item/66289487000000000103074f?source=webshare
+【afuri】,AFURI Ebisu AFURI 恵比寿,惠比寿,拉面,,连锁,东京惠比寿阿夫利,https://www.xiaohongshu.com/discovery/item/68eb73520000000005013ae4?source=webshare
+【Kamamototanbei】,Kamamototanbei 釜元たん米衛恵比寿店,惠比寿,定食,牛/猪舌饭,,惠比寿让我吃了十几次的小店,https://www.xiaohongshu.com/discovery/item/686463ab00000000120173df?source=webshare
+【キムカツ】,Kimukatsu キムカツ 恵比寿本店,惠比寿,猪排饭,,,惠比寿吃到人间值得炸猪排,https://www.xiaohongshu.com/discovery/item/6860c8130000000010012d14?source=webshare
+【チャモロ】,Chamorro レストラン チャモロ,惠比寿,蛋包饭,,排队,日本人都爱吃的老牌蛋包饭,https://www.xiaohongshu.com/discovery/item/680b090d000000001c0054da?source=webshare
+【SAMA CURRY】,Sama Curry&cafe SAMA下北沢店,下北泽,汤咖喱,,连锁,下北泽今天吃咖喱SAMA,https://www.xiaohongshu.com/discovery/item/610dc7db000000002103852b?source=webshare
+【202カリー堂】,202 Curry Dou 202カリー堂,下北泽,汤咖喱,,,东京最爱的一家汤咖喱,https://www.xiaohongshu.com/discovery/item/6874b9ed000000002001a7a0?source=webshare
+【BEAR POND ESPRESSO】,BEAR POND ESPRESSO,下北泽,咖啡店,dirty,dirty起源地,东京下北泽创造出Dirty咖啡的店,https://www.xiaohongshu.com/discovery/item/661df028000000001c0058f4?source=webshare`;
+  const TRIP_CSV = `事项,日期,时间,位置1,位置2,位置3,交通及路线,用时（h）,货币,人民币,日元,折算人民币,备注-1,备注-2,备注-3,备注-4,参考攻略-1,参考攻略-1对应链接,参考攻略-2,参考攻略-2对应链接,参考攻略-3,参考攻略-3对应链接,阶段,开始时间,最后期限,涉及人员,状态-S,状态-P,事项类型,区域
+【慈云寺-首都T3】,5月24日,5:30-6:00,,,,交通：打车,0.5,人民币,40,,40,,,,,,,,,,,行程中,,,,,,交通,
+【首都T3-羽田T3】,5月24日,8:25-12:55,"2-chōme-6-5 Hanedakūkō, Ota City, Tokyo 144-0041日本",,,交通：日本航空JL020,3.5,人民币,1240,,1240,1.提前扫码填入境信息/机上填入境卡（出发前3天）,2.提前3天选座订特殊餐、提前1天值机,3.特殊餐选项多，普通餐有哈根达斯冰淇淋,4.出发坐A座可看富士山,日本电子入境｜QR码填写攻略,https://www.xiaohongshu.com/discovery/item/69057b96000000000300db46?source=webshare,日航富士山观景选座&JL20/25搭乘体验,https://www.xiaohongshu.com/discovery/item/695e2538000000000a03c53e?source=webshare,,,行程中,,,,,,交通,
+【羽田T3-东京日本桥箱崎芬迪别墅酒店】,5月24日,14:00-15:00,"20-10 Nihonbashihakozakicho, Chuo City, Tokyo 103-0015日本",,,交通：羽田机场交通车/京急机场线,0.9,日元,,1000,43,,,,,羽田机场高速巴士速通指南,https://www.xiaohongshu.com/discovery/item/68e0ff910000000004004fc2?source=webshare,,,,,行程中,,,,,,交通,
+【酒店】,5月24日,15:00-15:30,"20-10 Nihonbashihakozakicho, Chuo City, Tokyo 103-0015日本",,,办理入住,0.5,人民币,361,,361,1.大堂有微波炉,2.咖啡＋红茶＋各种洗漱用品在前台自取,3.确认号：1718101756,,拖家带口东京自由行酒店首选,https://www.xiaohongshu.com/discovery/item/5d57fa5a00000000020214a3?source=webshare,,,,,行程中,,,,,,住宿,
+【酒店】,5月24日,15:30-17:00,"20-10 Nihonbashihakozakicho, Chuo City, Tokyo 103-0015日本",,,休息,1.5,人民币,50,,50,楼下罗森买好第二天早餐,,,,,,,,,,行程中,,,,,,饮食,
+【酒店-涩谷】,5月24日,17:00-17:30,,,,交通：半藏门线,0.5,日元,,209,9,也可以chill 时间很自由,,,,,,,,,,行程中,,,,,,交通,
+【涩谷】,5月24日,17:30-21:30,Shibuya Scramble Square 渋谷スクランブルスクエア,,,,4,人民币,100,,100,晚饭涩谷解决,,,,涩谷最繁忙十字路口俯瞰,https://www.xiaohongshu.com/discovery/item/69d0c719000000001a02b113?source=webshare,涩谷吃什么看这里,https://www.xiaohongshu.com/discovery/item/682d85b40000000023013751?source=webshare,涩谷人均60r平价美食,https://www.xiaohongshu.com/discovery/item/68da6719000000000e0254fc?source=webshare,行程中,,,,,,饮食,涩谷
+【涩谷-酒店】,5月24日,21:30-22:00,"20-10 Nihonbashihakozakicho, Chuo City, Tokyo 103-0015日本",,,交通：半藏门线,0.5,日元,,209,9,,,,,,,,,,,行程中,,,,,,交通,
+【酒店-浅草寺文化馆光中心】,5月25日,9:00-9:30,浅草文化观光中心展望台 浅草文化観光センター 展望テラス,,,交通：浅草线,0.5,日元,,178,8,,,,,,,,,,,行程中,,,,,,交通,
+【浅草寺】,5月25日,9:30-12:30,浅草寺雷门 雷門,,,交通：步行,2,人民币,100,,100,1.先在观光中心8层展望台拍照,2.可求御守,3.午饭附近解决,,夜游东京浅草寺夜景,https://www.xiaohongshu.com/discovery/item/6859f380000000000d024d4e?source=webshare,浅草寺攻略|东京打卡,https://www.xiaohongshu.com/discovery/item/681d71b1000000002002951f?source=webshare,购买注意事项,https://www.xiaohongshu.com/discovery/item/660d6454000000001b00d606?source=webshare,行程中,,,,,,饮食,浅草
+【浅草寺-国立西洋美术馆】,5月25日,12:30-13:00,National Museum of Western Art Main Building,,,交通：银座线,0.3,日元,,178,8,,,,,,,,,,,行程中,,,,,,交通,浅草
+【国立西洋美术馆、东京国立博物馆】,5月25日,13:00-16:00,东京国立博物馆 東京国立博物館,,,交通：步行,3,日元,,1500,65,1.可线上购票也可当场购票,2.西洋美术馆500/东博1000,3.西洋美术馆展品主要在二楼,4.东京中央银行总行在本馆大厅,东京莫奈睡莲展购票攻略,https://www.xiaohongshu.com/discovery/item/66f39c74000000001a021ca3?source=webshare,国立西洋美术馆常设展2小时攻略,https://www.xiaohongshu.com/discovery/item/6931aece000000001e004c6c?source=webshare,回看半泽直树发现去过东央行总行,https://www.xiaohongshu.com/discovery/item/689b6e11000000001c011f01?source=webshare,行程中,,,,,,旅游,浅草
+【上野公园-秋叶原】,5月25日,16:00-16:15,,,,交通：山手线,0.2,日元,,155,7,,,,,,,,,,,行程中,,,,,,交通,
+【秋叶原】,5月25日,16:15-19:00,Akihabara Radio Kaikan 秋葉原ラジオ会館,Animate 秋叶原店 アニメイト秋葉原,骏河屋 秋叶原本馆 駿河屋 秋葉原本館,交通：步行,2,人民币,100,,100,晚饭附近解决 也可去慈善南天,,,,秋叶原精华路线,https://www.xiaohongshu.com/discovery/item/6960f3f5000000001a02e20d?source=webshare,秋叶原大家都在推的咖喱,https://www.xiaohongshu.com/discovery/item/689ffaa7000000001d017dc3?source=webshare,,,行程中,,,,,,饮食,秋叶原
+【秋叶原-涩谷】,5月25日,19:00-19:30,,,,交通：银座线,0.5,日元,,209,9,依旧chill,,,,,,,,,,行程中,,,,,,交通,
+【涩谷】,5月25日,19:30-21:30,Shibuya Scramble Square 渋谷スクランブルスクエア,,,交通：步行,2,人民币,100,,100,晚餐,,,,,,,,,,行程中,,,,,,饮食,涩谷
+【涩谷-酒店】,5月25日,21:30-22:00,,,,交通：半藏门线,0.5,日元,,209,9,,,,,,,,,,,行程中,,,,,,交通,
+【酒店-东京站】,5月26日,9:00-9:30,,,,交通：半藏门线-丸之内线,0.3,"日元, 人民币",50,178,58,早餐,,,,,,,,,,行程中,,,,,,交通,
+【东京站-热海站】,5月26日,10:27-11:12,,,,交通：东海道新干线,0.8,日元,,4070,175,1.可窗口买可提前一个月网页买,2.线上购票账号信息,3.NOZOMI/HIKARI/KODAMA,4.A座可看海,日本新干线买票攻略,https://www.xiaohongshu.com/discovery/item/696f3ddf000000000a0323a0?source=webshare,东京到热海交通方式对比,https://www.xiaohongshu.com/discovery/item/697df470000000000903be41?source=webshare,东京→伊豆交通讲清,https://www.xiaohongshu.com/discovery/item/697cbe8b000000002102a44d?source=webshare,行程中,,,,,,交通,
+【和平通商业街】,5月26日,11:30-13:00,Atami Heiwa-dōri Shopping Street 熱海駅前平和通り名店街,,,交通：步行,1.5,人民币,120,,120,1.午餐在商业街解决,2.行李在火车站对面商场寄存,,,热海必吃美食合集,https://www.xiaohongshu.com/discovery/item/68e9eb080000000003020f4b?source=webshare,热海MOA附近荞麦面,https://www.xiaohongshu.com/discovery/item/6682736a000000001e010c68?source=webshare,热海J人分钟级攻略,https://www.xiaohongshu.com/discovery/item/6802386d000000001202c634?source=webshare,行程中,,,,,,饮食,热海
+【和平通商业街-MOA美术馆】,5月26日,13:00-13:30,,,,交通：步行+公交,0.5,日元,,200,9,刷公交卡,,,,,,,,,,行程中,,,,,,交通,热海
+【MOA美术馆】,5月26日,13:30-16:30,MOA美术馆 MOA美術館,,,,3,日元,,1800,77,车站案内所买打折票，16:30闭馆 周四闭馆,,,,moa美术馆特价票购买攻略,https://www.xiaohongshu.com/discovery/item/683aff05000000002301044a?source=webshare,热海MOA美术馆,https://www.xiaohongshu.com/discovery/item/69c3cc2a000000001d01b8c2?source=webshare,,,行程中,,,,,,旅游,热海
+【MOA美术馆-热海站】,5月26日,16:58-17:05,,,,交通：公交,0.2,,,,,大概15分钟一班,,,,,,,,,,行程中,,,,,,交通,热海
+【热海站-热海阳光海滩/亲水公园】,5月26日,17:05-17:20,Atami Water Park 熱海親水公園,,,交通：步行,0.3,,,,,,,,,热海MOA美术馆,https://www.xiaohongshu.com/discovery/item/69c3cc2a000000001d01b8c2?source=webshare,,,,,行程中,,,,,,交通,热海
+【海边-热海站】,5月26日,17:30-18:00,,,,交通：步行,0.5,,,,,取行李时间有点紧张 前面的行程可以压缩,,,,,,,,,,行程中,,,,,,旅游,热海
+【热海站-伊东站】,5月26日,18:04-18:30,,,,交通：伊东线,0.5,日元,,341,15,大概半小时一班 注意时间,,,,,,,,,,行程中,,,,,,饮食,
+【伊东站-龟屋乐宽】,5月26日,18:30-18:40,,,,交通：步行,0.2,,,,,,,,,,,,,,,行程中,,,,,,交通,
+【龟屋乐宽】,5月26日,18:40-19:00,Kameya Rakan かめや楽寛,,,办理入住,0.4,人民币,596,,596,确认号：1718103939,,,,伊豆龟屋乐宽海景日式体验,https://www.xiaohongshu.com/discovery/item/68cf0ac10000000013029509?source=webshare,,,,,行程中,,,,,,住宿,
+【龟屋乐宽】,5月26日,19:00-22:00,,,,,3,人民币,205,,205,1.晚餐100，泡汤55（非必须），早餐50,2.泡汤需在前台预约,3.早餐在附近711买,,,,,,,,行程中,,,,,,饮食,伊东
+【龟屋乐宽-伊东站】,5月27日,10:00-10:30,,,,交通：步行,0.2,,,,,可购买一日周游券1250,全天无限次乘坐公交车,大室山缆车便宜100,仅支持移动端购买,东海巴士周游券网上购买,https://www.xiaohongshu.com/discovery/item/68f747da0000000003034783?source=webshare,,,,,行程中,,,,,,交通,
+【伊东站-仙人掌动物园站】,5月27日,10:35-11:10,,,,交通：165,0.8,日元,,880,38,,,,,东海巴士时刻表调整通知,https://www.xiaohongshu.com/discovery/item/69c630900000000023017cc2?source=webshare,,,,,行程中,,,,,,交通,
+【大室山】,5月27日,11:10-13:00,大室山,,,缆车,2,"日元, 人民币",100,1000,165,往返价格上下山必须坐 无其他路线,午饭附近解决,,,伊豆高原去大室山的正确玩法,https://www.xiaohongshu.com/discovery/item/68ec85d70000000004002789?source=webshare,,,,,行程中,,,,,,旅游,大室山
+【仙人掌动物园站-海洋公园站】,5月27日,13:48-14:14,,,,交通：180,0.5,日元,,570,25,站牌上写着海的都可以,下一班14:45,,,城崎海岸半日游攻略,https://www.xiaohongshu.com/discovery/item/68da71930000000013016f0f?source=webshare,,,,,行程中,,,,,,交通,
+【海洋公园-吊桥展望所-城崎海岸站】,5月27日,14:30-16:30,Izu Oceanic Park 伊豆海洋公園,門脇吊橋展望所,城崎海岸 城ヶ崎海岸駅,交通：步行,2,,,,,路线：海洋公园-吊桥展望所-城崎海岸站,纯步行50min,,,大室山+城崎海岸+门胁吊桥4小时快速游,https://www.xiaohongshu.com/discovery/item/6831e12d0000000021005a72?source=webshare,从城崎海岸站不要按Google推荐路,https://www.xiaohongshu.com/discovery/item/685bc4e80000000022033c71?source=webshare,,,行程中,,,,,,旅游,城崎海岸
+【城崎海岸站-龟屋乐宽】,5月27日,16:57-17:30,,,,交通：伊豆急行线,0.5,日元,,646,28,回程电车半小时一班 注意时间,,,,,,,,,,行程中,,,,,,交通,
+【龟屋乐宽】,5月27日,17:30-22:00,,,,晚餐,4.5,人民币,205,,205,晚餐100，泡汤55（非必须），早餐50,,,,,,,,,,行程中,,,,,,饮食,
+【龟屋乐宽-热海站】,5月28日,10:00-10:42,,,,交通：伊东线,0.4,日元,,341,15,坐10:17那一班,,,,,,,,,,行程中,,,,,,交通,
+【热海站-东京站】,5月28日,11:02-11:48,,,,交通：东海道新干线,0.8,日元,,4070,175,具体车票可临时买,,,,,,,,,,行程中,,,,,,交通,
+【东京站-东京日本桥箱崎芬迪别墅酒店】,5月28日,12:00-12:15,,,,交通：丸之内线-半藏门线,0.3,日元,,178,8,,,,,,,,,,,行程中,,,,,,交通,
+【酒店】,5月28日,12:30-14:00,,,,办理入住+休息,1.5,人民币,690,,690,房费590+午餐附近吃100,确认号：1718115284,,,,,,,,,行程中,,,,,,住宿,
+【酒店-东京塔】,5月28日,14:00-14:30,,,,交通：半藏门线-大江户线,0.5,日元,,286,13,,,,,,,,,,,行程中,,,,,,交通,
+【东京塔打卡】,5月28日,14:30-16:00,东京铁塔 東京タワー,,,交通：步行,1.5,,,,,,,,,东京铁塔拍照不走回头路7机位,https://www.xiaohongshu.com/discovery/item/68d252c9000000001301afc7?source=webshare,,,,,行程中,,,,,,旅游,东京
+【东京塔-惠比寿花园广场】,5月28日,16:00-16:30,,,,交通：日比谷线,0.5,日元,,178,8,,,,,,,,,,,行程中,,,,,,交通,
+【惠比寿花园广场】,5月28日,16:30-17:30,惠比寿花园广场 恵比寿ガーデンプレイス,,,,1,,,,,上38层，出电梯后往里走,到中间位置左转,到sky lounge标识,,惠比寿花园广场观景台免费人少,https://www.xiaohongshu.com/discovery/item/68e5256f00000000050338e8?source=webshare,,,,,行程中,,,,,,旅游,惠比寿
+【惠比寿/银座】,5月28日,17:30-21:00,,,,,3.5,人民币,100,,100,晚餐,,,,,,,,,,行程中,,,,,,饮食,惠比寿
+【酒店-下北泽】,5月29日,10:00-11:00,,,,交通：半藏门线-千代田线,0.8,日元,,349,15,,,,,,,,,,,行程中,,,,,,交通,
+【下北泽】,5月29日,11:00-15:00,,,,交通：步行,4,人民币,100,,100,午饭,,,,半天时间逛下北泽,https://www.xiaohongshu.com/discovery/item/6833451d00000000210078af?source=webshare,东京下北泽真正的neighborhood,https://www.xiaohongshu.com/discovery/item/68ccf0b5000000001301df50?source=webshare,,,行程中,,,,,,饮食,下北泽
+【乱逛】,5月29日,15:00-22:00,,,,,7,人民币,150,,150,晚餐+交通费,,,,,,,,,,行程中,,,,,,饮食,
+【酒店-羽田T3】,5月30日,5:00-6:00,,,,交通：浅草线/羽田机场交通车,1,日元,,1000,43,,,,,,,,,,,行程中,,,,,,交通,
+【羽田T3-首都T3】,5月30日,8:50-12:00,,,,交通：日本航空JL021,3,人民币,1240,,1240,,,,,,,,,,,行程中,,,,,,交通,
+【首都T3-慈云寺】,5月30日,13:00-14:30,,,,交通：首都机场线+打车,1.5,人民币,50,,50,,,,,,,,,,,行程中,,,,,,交通,`;
+  const placeRows = parseCSV(PLACE_CSV);
+  const places = placeRows.map((r, i) => ({ id: `place-${i + 1}`, name: r["地点名称"], lat: f(r["纬度 (lat)"]), lng: f(r["经度 (lng)"],), type: r["类型"] || "景点", area: r["区域"] || detectArea(r["地点名称"]), source: r["来源"] || "映射表", tripItemIds: [], restaurantIds: [] }));
+  const placeIndex = {}; places.forEach((p) => { placeIndex[norm(p.name)] = p; });
+  const tripRows = parseCSV(TRIP_CSV);
+  const trips = tripRows.filter((r) => r["事项"] && r["日期"] && !String(r["日期"]).includes("准备")).map((r, i) => {
+    const title = cleanTitle(r["事项"]); const locations = [r["位置1"], r["位置2"], r["位置3"]].filter(Boolean); const allNames = [title, ...locations];
+    let place = null; allNames.some((n) => { const k = norm(n); if (placeIndex[k]) { place = placeIndex[k]; return true; } return false; });
+    if (!place) place = places.find((p) => allNames.some((n) => norm(p.name).includes(norm(n)) || norm(n).includes(norm(p.name))));
+    const id = `${dateFix(r["日期"])}-${i + 1}`; if (place) place.tripItemIds.push(id);
+    return { id, date: dateFix(r["日期"]), title, timeRange: r["时间"] || "", locations, route: r["交通及路线"] || "", durationHours: f(r["用时（h）"]), cnyCost: f(r["人民币"]), jpyCost: f(r["日元"]), convertedCny: f(r["折算人民币"]) || f(r["人民币"]) + f(r["日元"]) * JPY_TO_CNY, notes: [r["备注-1"], r["备注-2"], r["备注-3"], r["备注-4"]].filter(Boolean), links: parseLinks(r), type: splitType(r["事项类型"]) || (r["交通及路线"] ? "交通" : "旅游"), area: r["区域"] || detectArea(title, ...locations), lat: place ? place.lat : null, lng: place ? place.lng : null };
+  });
+  const restRows = parseCSV(REST_CSV);
+  const restaurants = restRows.map((r, i) => {
+    const name = cleanTitle(r["店名"]); const loc = r["位置"] || ""; const area = r["区域"] || detectArea(name, loc); let place = placeIndex[norm(name)] || placeIndex[norm(loc)] || places.find((p) => p.area === area && (norm(p.name).includes(norm(name)) || norm(name).includes(norm(p.name)) || (loc && norm(p.name).includes(norm(loc))))) || places.find((p) => p.area === area && (norm(p.name).includes(norm(name)) || norm(name).includes(norm(p.name)))) || places.find((p) => (p.area === area || !area) && norm(p.name).replace(/店|本店|支店|branch|branch$/g, "").includes(norm(name).replace(/店|本店|支店|branch|branch$/g, ""))) || null;
+    const id = `rest-${i + 1}`; if (place) place.restaurantIds.push(id);
+    return { id, name, location: loc, area, category: r["类型"] || "", recommendedDishes: r["推荐菜品"] || "", note: r["备注"] || "", links: parseLinks(r), lat: place ? place.lat : null, lng: place ? place.lng : null, tripItemIds: [] };
+  });
+  window.APP_DATA = { config: { jpyToCny: JPY_TO_CNY }, trips, places, restaurants, aliasMap: {} };
+})();
+    </script>
+    <script>
+const STORAGE_KEY = "trip_helper_user_state_v1";
+const STATUS_OPTIONS = ["未完成", "进行中", "已完成", "放弃"];
+const FOOD_STATUS_OPTIONS = ["未打卡", "打算去", "已打卡"];
+const STATUS_COLORS = { 景点: "blue", 餐厅: "orange", 住宿: "green", 交通: "gray", 商圈: "purple" };
+let map; let markerLayer; let currentArea = ""; let focusPlaceId = ""; let userState = loadUserState();
+const trips = (window.APP_DATA?.trips || []).map((item) => ({ ...item, convertedCny: typeof item.convertedCny === "number" ? item.convertedCny : (item.cnyCost || 0) + (item.jpyCost || 0) * (window.APP_DATA.config?.jpyToCny || 0.043) }));
+const prepTrips = [
+  { id: "prep-1", date: "前期准备", title: "扫码填写入境卡", timeRange: "前期准备", locations: [], route: "", durationHours: 0, cnyCost: 0, jpyCost: 0, convertedCny: 0, notes: ["日本电子入境 QR 填写"], links: [], type: "准备", area: "", lat: null, lng: null },
+  { id: "prep-2", date: "前期准备", title: "去程线上选座", timeRange: "前期准备", locations: [], route: "", durationHours: 0, cnyCost: 0, jpyCost: 0, convertedCny: 0, notes: ["提前选座与特殊餐"], links: [], type: "准备", area: "", lat: null, lng: null },
+  { id: "prep-3", date: "前期准备", title: "去程提前值机", timeRange: "前期准备", locations: [], route: "", durationHours: 0, cnyCost: 0, jpyCost: 0, convertedCny: 0, notes: ["起飞前 24 小时值机"], links: [], type: "准备", area: "", lat: null, lng: null },
+  { id: "prep-4", date: "前期准备", title: "手机绑定西瓜卡", timeRange: "前期准备", locations: [], route: "", durationHours: 0, cnyCost: 0, jpyCost: 0, convertedCny: 0, notes: ["交通支付准备"], links: [], type: "准备", area: "", lat: null, lng: null },
+  { id: "prep-5", date: "前期准备", title: "购买新干线车票", timeRange: "前期准备", locations: [], route: "", durationHours: 0, cnyCost: 0, jpyCost: 0, convertedCny: 0, notes: ["东京-热海往返"], links: [], type: "准备", area: "", lat: null, lng: null },
+  { id: "prep-6", date: "前期准备", title: "购买东海巴士一日周游券", timeRange: "前期准备", locations: [], route: "", durationHours: 0, cnyCost: 0, jpyCost: 0, convertedCny: 0, notes: ["伊东-大室山-城崎海岸"], links: [], type: "准备", area: "", lat: null, lng: null },
+  { id: "prep-7", date: "前期准备", title: "日元换汇", timeRange: "前期准备", locations: [], route: "", durationHours: 0, cnyCost: 0, jpyCost: 0, convertedCny: 0, notes: ["现金与银行卡搭配"], links: [], type: "准备", area: "", lat: null, lng: null },
+  { id: "prep-8", date: "前期准备", title: "境外流量卡", timeRange: "前期准备", locations: [], route: "", durationHours: 0, cnyCost: 0, jpyCost: 0, convertedCny: 0, notes: ["到达后可立即联网"], links: [], type: "准备", area: "", lat: null, lng: null },
+  { id: "prep-9", date: "中期准备", title: "回程线上选座", timeRange: "中期准备", locations: [], route: "", durationHours: 0, cnyCost: 0, jpyCost: 0, convertedCny: 0, notes: ["回程建议左侧看景"], links: [], type: "准备", area: "", lat: null, lng: null },
+  { id: "prep-10", date: "中期准备", title: "回程提前值机", timeRange: "中期准备", locations: [], route: "", durationHours: 0, cnyCost: 0, jpyCost: 0, convertedCny: 0, notes: ["起飞前 24 小时值机"], links: [], type: "准备", area: "", lat: null, lng: null }
+];
+if (!trips.some((t) => t.type === "准备" || String(t.date).includes("准备"))) trips.push(...prepTrips);
+const places = window.APP_DATA?.places || []; const restaurants = window.APP_DATA?.restaurants || [];
+function init() { bindNav(); renderTripTab(); renderFoodTab(); initMap(); updateProgress(); }
+function bindNav() { document.querySelectorAll(".nav-btn").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.tab))); }
+function switchTab(tab) { document.querySelectorAll(".tab-content").forEach((el) => el.classList.remove("active")); document.querySelectorAll(".nav-btn").forEach((el) => el.classList.remove("active")); document.getElementById(`tab-${tab}`).classList.add("active"); document.querySelector(`.nav-btn[data-tab="${tab}"]`).classList.add("active"); if (tab === "map") setTimeout(() => map.invalidateSize(), 150); }
+function renderTripTab() {
+  const container = document.getElementById("tab-trip"); const areas = unique(trips.map((t) => t.area).filter(Boolean)); const types = unique(trips.map((t) => t.type).filter(Boolean)); const fixedDateOptions = ["前期准备", "中期准备", "2026-05-24", "2026-05-25", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-05-30"];
+  container.innerHTML = `<div class="trip-controls"><div class="filters full"><select id="trip-date"><option value="">全部日期</option>${fixedDateOptions.map((d) => `<option value="${d}">${d}</option>`).join("")}</select><select id="trip-area"><option value="">全部区域</option>${areas.map((v) => `<option value="${v}">${v}</option>`).join("")}</select><select id="trip-type"><option value="">全部类型</option>${types.map((v) => `<option value="${v}">${v}</option>`).join("")}</select></div></div><div id="trip-list"></div>`;
+  ["trip-date", "trip-area", "trip-type"].forEach((id) => document.getElementById(id).addEventListener("change", renderTripList)); renderTripList();
+}
+function renderTripList() {
+  const date = document.getElementById("trip-date").value; const area = document.getElementById("trip-area").value; const type = document.getElementById("trip-type").value;
+  const data = trips.filter((t) => !date || t.date === date).filter((t) => !area || t.area === area).filter((t) => !type || t.type === type).sort(compareTripByDateTime);
+  const list = document.getElementById("trip-list"); list.innerHTML = data.map((t) => tripCardHtml(t)).join("") || `<div class="card">暂无符合筛选的行程。</div>`; data.forEach(bindTripCardEvents);
+}
+function tripCardHtml(t) {
+  const st = getState(t.id); const cardClass = stateCardClass(st.snowStatus, st.paigeStatus, "trip");
+  const typeClass = tripTypeClass(t.type);
+  const snowBar = statusBarColor(st.snowStatus, "trip");
+  const paigeBar = statusBarColor(st.paigeStatus, "trip");
+  return `<article class="card ${cardClass} ${typeClass}" style="--snow-bar:${snowBar};--paige-bar:${paigeBar};" id="trip-${t.id}"><div class="card-content"><h3>${t.title}</h3><div class="meta headline-time">${t.date} ${t.timeRange || ""}</div><div class="meta">地点：${(t.locations || []).join(" / ") || "-"}</div><div class="meta">交通：${t.route || "-"} ｜ 用时：${t.durationHours || 0}h</div><div class="meta">费用：¥${num(t.cnyCost)} + JPY ${num(t.jpyCost)} ≈ CNY ${num(t.convertedCny)}</div><div class="meta">类型：${t.type || "-"} ｜ 区域：${t.area || "-"}</div><div class="meta">备注：</div>${renderNotes(t.notes)}<div class="link-list">${renderLinks(t.links)}</div><div class="card-actions"><button class="secondary" data-go-map="${t.id}">地图定位</button></div><div class="status-grid">${userBoxHtml("Snow", "snow", t.id, st, STATUS_OPTIONS)}${userBoxHtml("Paige", "paige", t.id, st, STATUS_OPTIONS)}</div></div></article>`;
+}
+function userBoxHtml(label, key, id, st, options) {
+  const status = st[key + "Status"]; const rating = Number(st[key + "Rating"] || 0);
+  return `<div class="user-box"><strong>${label} <span class="status-tag status-${statusClass(status)}">${status}</span></strong><select class="status-select" data-status-user="${key}" data-id="${id}">${options.map((op) => `<option value="${op}" ${status === op ? "selected" : ""}>${op}</option>`).join("")}</select><div class="star-row" data-rating-user="${key}" data-id="${id}">${[1,2,3,4,5].map((n) => `<button type="button" class="star-btn ${n <= rating ? "active" : ""}" data-star="${n}" data-rating-user="${key}" data-id="${id}" aria-label="${label}${n}星">★</button>`).join("")}</div><textarea rows="2" placeholder="${label}备注" data-comment-user="${key}" data-id="${id}">${escapeHtml(st[key + "Comment"])}</textarea></div>`;
+}
+function bindTripCardEvents(t) {
+  document.querySelector(`[data-go-map="${t.id}"]`)?.addEventListener("click", () => focusPlaceByTrip(t.id));
+  document.querySelectorAll(`[data-id="${t.id}"][data-status-user]`).forEach((el) => el.addEventListener("change", () => { updateState(t.id, { [`${el.dataset.statusUser}Status`]: el.value }); renderTripList(); updateProgress(); showToast("状态已保存"); }));
+  document.querySelectorAll(`[data-id="${t.id}"][data-star][data-rating-user]`).forEach((el) => el.addEventListener("click", () => { const user = el.dataset.ratingUser; const star = Number(el.dataset.star || 0); const st = getState(t.id); const prev = Number(st[`${user}Rating`] || 0); const next = prev === star ? 0 : star; updateState(t.id, { [`${user}Rating`]: next }); renderTripList(); showToast("星级已保存"); }));
+  document.querySelectorAll(`[data-id="${t.id}"][data-comment-user]`).forEach((el) => el.addEventListener("blur", () => { updateState(t.id, { [`${el.dataset.commentUser}Comment`]: el.value.trim() }); showToast("备注已保存"); }));
+}
+function renderFoodTab() {
+  const container = document.getElementById("tab-food"); const areas = unique(restaurants.map((r) => r.area).filter(Boolean)); const types = unique(restaurants.map((r) => r.category).filter(Boolean));
+  container.innerHTML = `<div class="trip-controls"><div class="filters"><select id="food-area"><option value="">全部区域</option>${areas.map((v) => `<option value="${v}">${v}</option>`).join("")}</select><select id="food-type"><option value="">全部类型</option>${types.map((v) => `<option value="${v}">${v}</option>`).join("")}</select></div></div><div id="food-list"></div>`;
+  ["food-area", "food-type"].forEach((id) => document.getElementById(id).addEventListener("change", renderFoodList)); renderFoodList();
+}
+function renderFoodList() {
+  const area = document.getElementById("food-area").value; const type = document.getElementById("food-type").value;
+  const data = restaurants.filter((r) => !area || r.area === area).filter((r) => !type || r.category === type);
+  const list = document.getElementById("food-list");
+  list.innerHTML = data.map((r) => { const st = getState(r.id); const cardClass = stateCardClass(st.snowStatus, st.paigeStatus, "food"); const snowBar = statusBarColor(st.snowStatus, "food"); const paigeBar = statusBarColor(st.paigeStatus, "food"); return `<article class="card ${cardClass}" style="--snow-bar:${snowBar};--paige-bar:${paigeBar};" id="food-${r.id}"><div class="card-content"><h3>${r.name}</h3><div class="meta">区域：${r.area || "-"} ｜ 类型：${r.category || "-"}</div><div class="meta">推荐菜品：${r.recommendedDishes || "-"}</div><div class="meta">备注：${r.note || "-"}</div><div class="link-list">${renderLinks(r.links)}</div><div class="card-actions"><button class="secondary" data-food-map="${r.id}">地图定位</button></div><div class="status-grid">${userBoxHtml("Snow", "snow", r.id, st, FOOD_STATUS_OPTIONS)}${userBoxHtml("Paige", "paige", r.id, st, FOOD_STATUS_OPTIONS)}</div></div></article>`; }).join("") || `<div class="card">暂无符合筛选的餐厅。</div>`;
+  data.forEach((r) => {
+    document.querySelector(`[data-food-map="${r.id}"]`)?.addEventListener("click", () => focusRestaurant(r.id));
+    document.querySelectorAll(`[data-id="${r.id}"][data-status-user]`).forEach((el) => el.addEventListener("change", () => { updateState(r.id, { [`${el.dataset.statusUser}Status`]: el.value }); renderFoodList(); showToast("美食状态已保存"); }));
+    document.querySelectorAll(`[data-id="${r.id}"][data-comment-user]`).forEach((el) => el.addEventListener("blur", () => { updateState(r.id, { [`${el.dataset.commentUser}Comment`]: el.value.trim() }); showToast("评价已保存"); }));
+    document.querySelectorAll(`[data-id="${r.id}"][data-star][data-rating-user]`).forEach((el) => el.addEventListener("click", () => { const user = el.dataset.ratingUser; const star = Number(el.dataset.star || 0); const st = getState(r.id); const prev = Number(st[`${user}Rating`] || 0); const next = prev === star ? 0 : star; updateState(r.id, { [`${user}Rating`]: next }); renderFoodList(); showToast("星级已保存"); }));
+  });
+}
+function initMap() { map = L.map("map", { zoomControl: true }).setView([35.35, 139.4], 9); L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(map); markerLayer = L.layerGroup().addTo(map); renderMapToolbar(); renderMarkers(); }
+function renderMapToolbar() {
+  const wrap = document.getElementById("map-toolbar"); if (!wrap) return;
+  wrap.innerHTML = `<button class="secondary" id="btn-map-all">显示全部地点</button><button class="secondary" id="btn-map-area" ${currentArea ? "" : "disabled"}>缩放到当前区域</button>`;
+  document.getElementById("btn-map-all").addEventListener("click", () => { currentArea = ""; renderMarkers(); fitToMarkers(); });
+  document.getElementById("btn-map-area").addEventListener("click", () => { if (!currentArea) return; fitToMarkers(true); });
+}
+function renderMarkers() {
+  if (!markerLayer) return; markerLayer.clearLayers();
+  const pool = places.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng)); const data = currentArea ? pool.filter((p) => p.area === currentArea) : pool;
+  data.forEach((p) => { const marker = L.circleMarker([p.lat, p.lng], { radius: focusPlaceId === p.id ? 10 : 7, color: STATUS_COLORS[p.type] || "blue", fillOpacity: 0.8 }).addTo(markerLayer); marker.bindPopup(placePopupHtml(p)); marker.on("popupopen", () => bindPopupEvents(p)); });
+  if (focusPlaceId && data.some((p) => p.id === focusPlaceId)) { const target = data.find((p) => p.id === focusPlaceId); map.setView([target.lat, target.lng], 14); }
+}
+function placePopupHtml(p) {
+  const relatedTrips = trips.filter((t) => (p.tripItemIds || []).includes(t.id));
+  const relatedFood = restaurants.filter((r) => (p.restaurantIds || []).includes(r.id));
+  const links = unique(relatedTrips.flatMap((t) => t.links || []).map((l) => JSON.stringify(l))).map((s) => JSON.parse(s));
+  const st = getState(p.id);
+  const foodItems = relatedFood
+    .map((r) => `<button type="button" class="popup-chip" data-popup-food="${r.id}">${escapeHtml(r.name)}</button>`)
+    .join("");
+  const tripItems = relatedTrips
+    .map((t) => `<button type="button" class="popup-chip" data-popup-trip="${t.id}">${escapeHtml(t.date)} ${escapeHtml(t.title)}</button>`)
+    .join("");
+  return `
+    <div class="map-popup">
+      <div class="map-popup__title">${escapeHtml(p.name)}</div>
+      <div class="map-popup__meta">${escapeHtml(p.type || "-")} · ${escapeHtml(p.area || "-")}</div>
+      <div class="map-popup__section">
+        <div class="map-popup__section-title">关联行程</div>
+        <div class="popup-chip-list">${tripItems || "<span class='map-popup__empty'>暂无</span>"}</div>
+      </div>
+      <div class="map-popup__section">
+        <div class="map-popup__section-title">关联餐厅</div>
+        <div class="popup-chip-list">${foodItems || "<span class='map-popup__empty'>暂无</span>"}</div>
+      </div>
+      <div class="map-popup__section">
+        <div class="map-popup__section-title">参考链接</div>
+        <div class="map-popup__links">${renderLinks(links)}</div>
+      </div>
+      <div class="map-popup__section map-popup__state">Snow：${escapeHtml(st.snowStatus)} ｜ Paige：${escapeHtml(st.paigeStatus)}</div>
+      <textarea rows="2" data-popup-comment="snow" data-id="${p.id}" placeholder="Snow 地点备注">${escapeHtml(st.snowComment)}</textarea>
+      <textarea rows="2" data-popup-comment="paige" data-id="${p.id}" placeholder="Paige 地点备注">${escapeHtml(st.paigeComment)}</textarea>
+    </div>`;
+}
+function bindPopupEvents(p) {
+  document.querySelectorAll("[data-popup-trip]").forEach((el) => el.addEventListener("click", (e) => { e.preventDefault(); switchTab("trip"); const target = document.getElementById(`trip-${el.dataset.popupTrip}`); if (target) target.scrollIntoView({ behavior: "smooth", block: "center" }); }));
+  document.querySelectorAll("[data-popup-food]").forEach((el) => el.addEventListener("click", (e) => { e.preventDefault(); switchTab("food"); const target = document.getElementById(`food-${el.dataset.popupFood}`); if (target) target.scrollIntoView({ behavior: "smooth", block: "center" }); }));
+  document.querySelectorAll(`[data-id="${p.id}"][data-popup-comment]`).forEach((el) => el.addEventListener("blur", () => { updateState(p.id, { [`${el.dataset.popupComment}Comment`]: el.value.trim() }); showToast("地点备注已保存"); }));
+}
+function openFoodCardFromPopup(restId) { switchTab("food"); setTimeout(() => { const target = document.getElementById(`food-${restId}`); if (target) target.scrollIntoView({ behavior: "smooth", block: "center" }); }, 60); }
+function focusPlaceByTrip(tripId) { const place = places.find((p) => (p.tripItemIds || []).includes(tripId)); if (!place) { showToast("未找到对应地点坐标"); return; } focusPlaceId = place.id; switchTab("map"); renderMarkers(); const marker = markerLayer?._layers && Object.values(markerLayer._layers).find((m) => m?._latlng?.lat === place.lat && m?._latlng?.lng === place.lng); if (marker?.openPopup) marker.openPopup(); }
+function focusRestaurant(restId) { const r = restaurants.find((x) => x.id === restId); if (!r || !Number.isFinite(r.lat) || !Number.isFinite(r.lng)) { showToast("该餐厅暂无坐标"); return; } switchTab("map"); focusPlaceId = places.find((p) => (p.restaurantIds || []).includes(restId))?.id || focusPlaceId; map.setView([r.lat, r.lng], 14); const html = `<div class="map-popup"><div class="map-popup__title">${escapeHtml(r.name)}</div><div class="map-popup__meta">${escapeHtml(r.area || "-")} · ${escapeHtml(r.category || "-")}</div><div class="map-popup__section"><div class="map-popup__section-title">跳转</div><button type="button" class="popup-chip" data-popup-food="${r.id}">打开餐厅卡片</button></div></div>`; L.popup({ closeButton: true, autoPan: true, maxWidth: 340 }).setLatLng([r.lat, r.lng]).setContent(html).openOn(map); setTimeout(() => { document.querySelectorAll(`[data-popup-food="${r.id}"]`).forEach((el) => el.addEventListener("click", (e) => { e.preventDefault(); openFoodCardFromPopup(r.id); })); }, 0); }
+function fitToMarkers(limitArea = false) { const data = (limitArea && currentArea ? places.filter((p) => p.area === currentArea) : places).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng)); if (!data.length) return; const bounds = L.latLngBounds(data.map((p) => [p.lat, p.lng])); map.fitBounds(bounds, { padding: [20, 20] }); }
+function getState(targetId) { const isFood = String(targetId).startsWith("rest-"); const defaultStatus = isFood ? "未打卡" : "未完成"; return userState[targetId] || { targetId, snowStatus: defaultStatus, paigeStatus: defaultStatus, snowComment: "", paigeComment: "", snowRating: 0, paigeRating: 0, lastModified: Date.now() }; }
+function updateState(targetId, patch) { const old = getState(targetId); userState[targetId] = { ...old, ...patch, lastModified: Date.now() }; saveUserState(); }
+function updateProgress() { const total = trips.length; const doneSnow = trips.filter((t) => getState(t.id).snowStatus === "已完成").length; const donePaige = trips.filter((t) => getState(t.id).paigeStatus === "已完成").length; document.getElementById("progress-snow").textContent = `Snow: ${doneSnow}/${total}`; document.getElementById("progress-paige").textContent = `Paige: ${donePaige}/${total}`; }
+function resetAllData() { const ok = window.confirm("确认重置所有状态和备注？此操作不可撤销。"); if (!ok) return; localStorage.removeItem(STORAGE_KEY); userState = {}; renderTripList(); updateProgress(); showToast("已恢复初始状态"); }
+function loadUserState() { try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : {}; } catch (_err) { return {}; } }
+function saveUserState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(userState)); }
+function renderLinks(links = []) { if (!Array.isArray(links) || !links.length) return ""; return links.filter((l) => l?.url).map((l, i) => `<a href="${l.url}" target="_blank" rel="noopener noreferrer">🔗 ${escapeHtml(l.title || `参考攻略-${i + 1}`)}</a>`).join(""); }
+function renderNotes(notes = []) { const list = (notes || []).filter(Boolean); if (!list.length) return `<div class="meta">-</div>`; return `<ul class="note-list">${list.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul>`; }
+function unique(arr) { return [...new Set(arr)]; }
+function num(v) { return Number(v || 0).toFixed(2); }
+function escapeHtml(str = "") { return String(str).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+let toastTimer; function showToast(text) { const el = document.getElementById("toast"); el.textContent = text; el.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 1300); }
+function statusClass(status) { return String(status || "").replace(/\s+/g, ""); }
+function stateCardClass(snowStatus, paigeStatus, target) { const values = [snowStatus, paigeStatus]; if (target === "food") { if (values.includes("已打卡")) return "card-state-food-done"; if (values.includes("打算去")) return "card-state-food-plan"; return "card-state-food-todo"; } if (values.includes("放弃")) return "card-state-trip-drop"; if (values.includes("进行中")) return "card-state-trip-doing"; if (values.includes("已完成")) return "card-state-trip-done"; return "card-state-trip-todo"; }
+function statusBarColor(status, target) { if (target === "food") { if (status === "已打卡") return "#16a34a"; if (status === "打算去") return "#2563eb"; return "#6b7280"; } if (status === "已完成") return "#16a34a"; if (status === "进行中") return "#2563eb"; if (status === "放弃") return "#dc2626"; return "#9ca3af"; }
+function tripTypeClass(type) { const t = String(type || "").replace(/\s+/g, ""); if (t.includes("交通")) return "card-type-交通"; if (t.includes("住宿")) return "card-type-住宿"; if (t.includes("旅游")) return "card-type-旅游"; if (t.includes("饮食")) return "card-type-饮食"; if (t.includes("准备")) return "card-type-准备"; return ""; }
+function getStartMinutes(timeRange = "") { const m = String(timeRange).match(/(\d{1,2}):(\d{1,2})/); if (!m) return 24 * 60; return Number(m[1]) * 60 + Number(m[2]); }
+function compareTripByDateTime(a, b) { const d = String(a.date || "").localeCompare(String(b.date || "")); if (d !== 0) return d; return getStartMinutes(a.timeRange) - getStartMinutes(b.timeRange); }
+init();
+    </script>
+  </body>
+</html>
